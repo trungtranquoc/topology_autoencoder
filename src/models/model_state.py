@@ -67,7 +67,7 @@ class ModelState:
         model_dir = os.path.join(MODELS_DIR, model_name)
         metadata_file = os.path.join(model_dir, "metadata.json")
         
-        self.model.load_state_dict(torch.load(os.path.join(model_dir, "model.pth")))
+        self.model.load_state_dict(torch.load(os.path.join(model_dir, "model.pth"), map_location="cpu"))
         
         with open(metadata_file, 'r') as f:
             data = json.load(f)

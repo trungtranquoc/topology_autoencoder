@@ -1,4 +1,7 @@
 import torch.nn as nn
+from sklearn.preprocessing import StandardScaler
+import torch
+import numpy as np
 
 class CNNAutoencoder(nn.Module):
     def __init__(self):
@@ -31,3 +34,31 @@ class CNNAutoencoder(nn.Module):
         encoded = self.encoder(x)
         decoded = self.decoder(encoded)
         return decoded
+    
+    def encode_dataset(self, loader, device=torch.device('cpu')):
+        """
+        Encodes the input data using the encoder part of the model.
+        
+        Args:
+            model (CNNAutoencoder): The autoencoder model.
+            x (torch.Tensor): Input data tensor.
+            
+        Returns:
+            torch.Tensor: Encoded representation of the input data.
+        """
+        X_compressed_list = []
+
+        self.eval()
+        for batch in loader:
+            with torch.no_grad():
+                batch = batch.to(device)
+                batch = batch.unsqueeze(1)
+                X_encoded = self.encode(batch)
+                X_compressed_list.append(X_encoded.detach().cpu().numpy())
+
+        X_compressed = np.concatenate(X_compressed_list, axis=0).squeeze()
+        scaler = StandardScaler()
+        X_compressed_scaled = scaler.fit_transform(X_compressed)
+
+        return X_compressed_scaled
+        

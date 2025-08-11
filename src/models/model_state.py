@@ -72,5 +72,3 @@ class ModelState:
         with open(metadata_file, 'r') as f:
             data = json.load(f)
             self.__dict__.update(data)
-
-        print(f"Model loaded from {model_dir}")

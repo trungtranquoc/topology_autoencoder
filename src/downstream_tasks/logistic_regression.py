@@ -2,9 +2,10 @@ from .model_base import BaseModel
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from torch.utils.data import DataLoader, Dataset
 import numpy as np
 from tqdm import tqdm
+
+from ..data_processing import ClassificationDataset
 
 class LogisticReg(nn.Module):
     def __init__(self, input_size, output_size):
@@ -14,23 +15,6 @@ class LogisticReg(nn.Module):
 
     def forward(self, x):
         return self.relu(self.fc(x))
-    
-class ClassificationDataset(Dataset):
-    def __init__(self, X, y = None):
-        self.X = X.astype(np.float32)  # convert once, but stay in numpy
-        if y is not None:
-            self.y = y.astype(np.int64)
-        else:
-            self.y = None
-
-    def __len__(self):
-        return len(self.X)
-
-    def __getitem__(self, idx):
-        if self.y is not None:
-            return torch.from_numpy(self.X[idx]), torch.tensor(self.y[idx])  # convert per sample on-the-fly
-        else:
-            return torch.from_numpy(self.X[idx])
 
 class LogisticRegModel(BaseModel):
     def __init__(self, input_size, output_size, device="cpu", seed=2025):
@@ -39,9 +23,6 @@ class LogisticRegModel(BaseModel):
         torch.manual_seed(seed=seed)
         self.model = LogisticReg(input_size, output_size)
         self.model.to(device)
-
-    def prepare_batch(self, X, y=None, batch_size=64):
-        return DataLoader(ClassificationDataset(X, y), batch_size=batch_size)
     
     def fit(self, X, y, num_epochs=10, lr=1e-2):
         """
@@ -56,12 +37,13 @@ class LogisticRegModel(BaseModel):
         Returns:
             list[float]: A list of training loss values for each epoch.
         """
-        train_loader = self.prepare_batch(X, y)
+        train_loader = ClassificationDataset(X, y).preprare_batch(batch_size=64)
+    
         criterion = nn.CrossEntropyLoss()
         optimizer = optim.Adam(self.model.parameters(), lr=lr)
         log_loss = []
-        
-        for _ in tqdm(range(num_epochs), desc="Training"):
+        progress_bar = tqdm(range(num_epochs), desc="Training Logistic Regression")
+        for _ in progress_bar:
             self.model.train()
             running_loss = 0.0
             for X_batch, y_batch in train_loader:
@@ -78,6 +60,7 @@ class LogisticRegModel(BaseModel):
                 running_loss += loss.item()
         
             log_loss.append(running_loss)
+            progress_bar.set_postfix({"Loss": running_loss / len(train_loader)})
 
         return log_loss
     
@@ -91,7 +74,8 @@ class LogisticRegModel(BaseModel):
         Returns:
             np.ndarray: Predicted class labels of shape (n_samples,).
         """
-        test_loader = self.prepare_batch(X)
+        dataset = ClassificationDataset(X)
+        test_loader = dataset.preprare_batch(batch_size=64)
 
         output_list = []
         self.model.eval()
@@ -108,20 +92,3 @@ class LogisticRegModel(BaseModel):
                 output_list.append(preds.detach().cpu().numpy())
     
         return np.concatenate(output_list, axis=0)
-
-    def eval(self, y_true, y_preds, metric, **kwargs):
-        """
-        Evaluates prediction results using a specified metric function with optional keyword arguments.
-
-        Args:
-            y_true (np.ndarray): Ground truth labels, shape (n_samples,).
-            y_preds (np.ndarray): Predicted labels, shape (n_samples,).
-            metric (Callable): A scoring function that takes (y_true, y_preds) and optional kwargs, e.g.,
-                `sklearn.metrics.accuracy_score`, `f1_score`, etc.
-            **kwargs: Additional keyword arguments to pass to the metric function (e.g., average='micro').
-
-        Returns:
-            float: Evaluation score computed by the given metric.
-        """
-
-        return metric(y_true.astype(np.int32), y_preds.astype(np.int32), **kwargs)
